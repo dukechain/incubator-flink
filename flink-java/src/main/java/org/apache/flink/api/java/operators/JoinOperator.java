@@ -218,7 +218,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 				generateProjectionProperties(((ProjectFlatJoinFunction<?, ?, ?>) generatedFunction));
 			}
 		}
-
+		
 		public void generateProjectionProperties(ProjectFlatJoinFunction<?, ?, ?> pjf) {
 			DualInputSemanticProperties props = SemanticPropUtil.createProjectionPropertiesDual(pjf.getFields(), pjf.getIsFromFirst());
 			setSemanticProperties(props);
@@ -582,6 +582,33 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 			return new JoinProjection<I1, I2>(getInput1(), getInput2(), getKeys1(), getKeys2(), getJoinHint(), firstFieldIndexes, null);
 		}
 		
+		
+		/**
+		 * Initiates a ProjectJoin transformation and projects the first join input<br/>
+		 * If the first join input is a {@link Tuple} {@link DataSet}, fields can be selected by their index.
+		 * If the first join input is not a Tuple DataSet, no parameters should be passed.<br/>
+		 * 
+		 * Fields of the first and second input can be added by chaining the method calls of
+		 * {@link org.apache.flink.api.java.operators.JoinOperator.ProjectJoin#projectionFirst(int...)} and
+		 * {@link org.apache.flink.api.java.operators.JoinOperator.ProjectJoin#projectionSecond(int...)}.
+		 * 
+		 * @param firstFieldIndexes If the first input is a Tuple DataSet, the indexes of the selected fields.
+		 * 					   For a non-Tuple DataSet, do not provide parameters.
+		 * 					   The order of fields in the output tuple is defined by to the order of field indexes.
+		 * @return A ProjectJoin to complete the Join transformation.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 * @see org.apache.flink.api.java.operators.JoinOperator.JoinProjection
+		 * @see org.apache.flink.api.java.operators.JoinOperator.ProjectJoin
+		 */
+		public <OUT extends Tuple> ProjectJoin<I1, I2, OUT> projectionFirst(int... firstFieldIndexes) {
+			JoinProjection<I1, I2> joinProjection = new JoinProjection<I1, I2>(getInput1(), getInput2(), getKeys1(), getKeys2(), getJoinHint(), firstFieldIndexes, null);
+			
+			return joinProjection.types();
+		}
+		
+		
 		/**
 		 * Initiates a ProjectJoin transformation and projects the second join input<br/>
 		 * If the second join input is a {@link Tuple} {@link DataSet}, fields can be selected by their index.
@@ -606,7 +633,31 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		public JoinProjection<I1, I2> projectSecond(int... secondFieldIndexes) {
 			return new JoinProjection<I1, I2>(getInput1(), getInput2(), getKeys1(), getKeys2(), getJoinHint(), null, secondFieldIndexes);
 		}
-		
+	
+		/**
+		 * Initiates a ProjectJoin transformation and projects the second join input<br/>
+		 * If the second join input is a {@link Tuple} {@link DataSet}, fields can be selected by their index.
+		 * If the second join input is not a Tuple DataSet, no parameters should be passed.<br/>
+		 * 
+		 * Fields of the first and second input can be added by chaining the method calls of
+		 * {@link org.apache.flink.api.java.operators.JoinOperator.ProjectJoin#projectionFirst(int...)} and
+		 * {@link org.apache.flink.api.java.operators.JoinOperator.ProjectJoin#projectionSecond(int...)}.
+		 * 
+		 * @param secondFieldIndexes If the second input is a Tuple DataSet, the indexes of the selected fields. 
+		 * 					   For a non-Tuple DataSet, do not provide parameters.
+		 * 					   The order of fields in the output tuple is defined by to the order of field indexes.
+		 * @return A ProjectJoin to complete the Join transformation.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 * @see org.apache.flink.api.java.operators.JoinOperator.JoinProjection
+		 * @see org.apache.flink.api.java.operators.JoinOperator.ProjectJoin
+		 */
+		public <OUT extends Tuple> ProjectJoin<I1, I2, OUT> projectionSecond(int... secondFieldIndexes) {
+			JoinProjection<I1, I2> joinProjection = new JoinProjection<I1, I2>(getInput1(), getInput2(), getKeys1(), getKeys2(), getJoinHint(), null, secondFieldIndexes);
+			
+			return joinProjection.types();
+		}
 //		public JoinOperator<I1, I2, I1> leftSemiJoin() {
 //			return new LeftSemiJoin<I1, I2>(getInput1(), getInput2(), getKeys1(), getKeys2(), getJoinHint());
 //		}
@@ -636,12 +687,38 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 	 * @see Tuple
 	 * @see DataSet
 	 */
-	public static final class ProjectJoin<I1, I2, OUT extends Tuple> extends EquiJoin<I1, I2, OUT> {
+	public static class ProjectJoin<I1, I2, OUT extends Tuple> extends EquiJoin<I1, I2, OUT> {
+		
+		private JoinProjection<I1, I2> joinProj;
 		
 		protected ProjectJoin(DataSet<I1> input1, DataSet<I2> input2, Keys<I1> keys1, Keys<I2> keys2, JoinHint hint, int[] fields, boolean[] isFromFirst, TupleTypeInfo<OUT> returnType) {
 			super(input1, input2, keys1, keys2, 
 					new ProjectFlatJoinFunction<I1, I2, OUT>(fields, isFromFirst, returnType.createSerializer().createInstance()),
 					returnType, hint);
+			
+			joinProj = null;
+		}
+		
+		protected ProjectJoin(DataSet<I1> input1, DataSet<I2> input2, Keys<I1> keys1, Keys<I2> keys2, JoinHint hint, int[] fields, boolean[] isFromFirst, TupleTypeInfo<OUT> returnType, JoinProjection<I1, I2> joinProj) {
+			super(input1, input2, keys1, keys2, 
+					new ProjectFlatJoinFunction<I1, I2, OUT>(fields, isFromFirst, returnType.createSerializer().createInstance()),
+					returnType, hint);
+			
+			this.joinProj = joinProj;
+		}
+		
+		@SuppressWarnings("hiding")
+		public <OUT extends Tuple> ProjectJoin<I1, I2, OUT> projectionFirst(int... firstFieldIndexes) {	
+			joinProj = joinProj.projectFirst(firstFieldIndexes);
+			
+			return joinProj.types();
+		}
+		
+		@SuppressWarnings("hiding")
+		public <OUT extends Tuple> ProjectJoin<I1, I2, OUT> projectionSecond(int... secondFieldIndexes) {
+			joinProj = joinProj.projectSecond(secondFieldIndexes);
+			
+			return joinProj.types();
 		}
 
 		@Override
@@ -965,6 +1042,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 			}
 			out.collect(outTuple);
 		}
+		
 	}
 	
 	public static final class LeftSemiFlatJoinFunction<T1, T2> extends RichFlatJoinFunction<T1, T2, T1> {
@@ -1075,7 +1153,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 				// check field indexes and adapt to position in tuple
 				int maxFieldIndex = firstInput ? numFieldsDs1 : numFieldsDs2;
 				for(int i=0; i<this.fieldIndexes.length; i++) {
-					if(this.fieldIndexes[i] > maxFieldIndex - 1) {
+					if(this.fieldIndexes[i] > maxFieldIndex - 1 || this.fieldIndexes[i] < 0) {
 						throw new IndexOutOfBoundsException("Provided field index is out of bounds of input tuple.");
 					}
 					if(firstInput) {
@@ -1138,7 +1216,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 				int maxFieldIndex = numFieldsDs1;
 				for(int i = 0; i < firstFieldIndexes.length; i++) {
 					// check if indexes in range
-					if(firstFieldIndexes[i] > maxFieldIndex - 1) {
+					if(firstFieldIndexes[i] > maxFieldIndex - 1 || firstFieldIndexes[i] < 0) {
 						throw new IndexOutOfBoundsException("Provided field index is out of bounds of input tuple.");
 					}
 					this.isFieldInFirst[offset + i] = true;
@@ -1204,7 +1282,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 				int maxFieldIndex = numFieldsDs2;
 				for(int i = 0; i < secondFieldIndexes.length; i++) {
 					// check if indexes in range
-					if(secondFieldIndexes[i] > maxFieldIndex - 1) {
+					if(secondFieldIndexes[i] > maxFieldIndex - 1 || secondFieldIndexes[i] < 0) {
 						throw new IndexOutOfBoundsException("Provided field index is out of bounds of input tuple.");
 					}
 					this.isFieldInFirst[offset + i] = false;
@@ -1230,10 +1308,452 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 	// GENERATED FROM org.apache.flink.api.java.tuple.TupleGenerator.
 
 		/**
+		 * Chooses a projectTupleX according to the length of {@link JoinProjection#fieldIndexes} 
+		 * 
+		 * @return The projected DataSet.
+		 * 
+		 * @see Projection
+		 */
+		@SuppressWarnings("unchecked")
+		public <OUT extends Tuple> ProjectJoin<I1, I2, OUT> types() {
+			ProjectJoin<I1, I2, OUT> projectJoin = null;
+
+			switch (fieldIndexes.length) {
+			case 1: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple1();
+			case 2: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple2();
+			case 3: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple3();
+			case 4: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple4();
+			case 5: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple5();
+			case 6: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple6();
+			case 7: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple7();
+			case 8: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple8();
+			case 9: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple9();
+			case 10: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple10();
+			case 11: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple11();
+			case 12: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple12();
+			case 13: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple13();
+			case 14: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple14();
+			case 15: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple15();
+			case 16: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple16();
+			case 17: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple17();
+			case 18: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple18();
+			case 19: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple19();
+			case 20: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple20();
+			case 21: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple21();
+			case 22: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple22();
+			case 23: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple23();
+			case 24: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple24();
+			case 25: projectJoin = (ProjectJoin<I1, I2, OUT>) projectTuple25();
+			}
+
+			return projectJoin;
+		}
+
+		/**
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0> ProjectJoin<I1, I2, Tuple1<T0>> projectTuple1() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple1<T0>> tType = new TupleTypeInfo<Tuple1<T0>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple1<T0>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1> ProjectJoin<I1, I2, Tuple2<T0, T1>> projectTuple2() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple2<T0, T1>> tType = new TupleTypeInfo<Tuple2<T0, T1>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple2<T0, T1>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2> ProjectJoin<I1, I2, Tuple3<T0, T1, T2>> projectTuple3() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple3<T0, T1, T2>> tType = new TupleTypeInfo<Tuple3<T0, T1, T2>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple3<T0, T1, T2>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3> ProjectJoin<I1, I2, Tuple4<T0, T1, T2, T3>> projectTuple4() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple4<T0, T1, T2, T3>> tType = new TupleTypeInfo<Tuple4<T0, T1, T2, T3>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple4<T0, T1, T2, T3>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4> ProjectJoin<I1, I2, Tuple5<T0, T1, T2, T3, T4>> projectTuple5() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple5<T0, T1, T2, T3, T4>> tType = new TupleTypeInfo<Tuple5<T0, T1, T2, T3, T4>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple5<T0, T1, T2, T3, T4>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5> ProjectJoin<I1, I2, Tuple6<T0, T1, T2, T3, T4, T5>> projectTuple6() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple6<T0, T1, T2, T3, T4, T5>> tType = new TupleTypeInfo<Tuple6<T0, T1, T2, T3, T4, T5>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple6<T0, T1, T2, T3, T4, T5>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6> ProjectJoin<I1, I2, Tuple7<T0, T1, T2, T3, T4, T5, T6>> projectTuple7() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple7<T0, T1, T2, T3, T4, T5, T6>> tType = new TupleTypeInfo<Tuple7<T0, T1, T2, T3, T4, T5, T6>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple7<T0, T1, T2, T3, T4, T5, T6>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7> ProjectJoin<I1, I2, Tuple8<T0, T1, T2, T3, T4, T5, T6, T7>> projectTuple8() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple8<T0, T1, T2, T3, T4, T5, T6, T7>> tType = new TupleTypeInfo<Tuple8<T0, T1, T2, T3, T4, T5, T6, T7>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple8<T0, T1, T2, T3, T4, T5, T6, T7>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8> ProjectJoin<I1, I2, Tuple9<T0, T1, T2, T3, T4, T5, T6, T7, T8>> projectTuple9() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple9<T0, T1, T2, T3, T4, T5, T6, T7, T8>> tType = new TupleTypeInfo<Tuple9<T0, T1, T2, T3, T4, T5, T6, T7, T8>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple9<T0, T1, T2, T3, T4, T5, T6, T7, T8>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9> ProjectJoin<I1, I2, Tuple10<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>> projectTuple10() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple10<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>> tType = new TupleTypeInfo<Tuple10<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple10<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10> ProjectJoin<I1, I2, Tuple11<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>> projectTuple11() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple11<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>> tType = new TupleTypeInfo<Tuple11<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple11<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11> ProjectJoin<I1, I2, Tuple12<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>> projectTuple12() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple12<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>> tType = new TupleTypeInfo<Tuple12<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple12<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> ProjectJoin<I1, I2, Tuple13<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>> projectTuple13() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple13<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>> tType = new TupleTypeInfo<Tuple13<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple13<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13> ProjectJoin<I1, I2, Tuple14<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>> projectTuple14() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple14<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>> tType = new TupleTypeInfo<Tuple14<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple14<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14> ProjectJoin<I1, I2, Tuple15<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>> projectTuple15() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple15<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>> tType = new TupleTypeInfo<Tuple15<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple15<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15> ProjectJoin<I1, I2, Tuple16<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>> projectTuple16() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple16<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>> tType = new TupleTypeInfo<Tuple16<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple16<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16> ProjectJoin<I1, I2, Tuple17<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16>> projectTuple17() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple17<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16>> tType = new TupleTypeInfo<Tuple17<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple17<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17> ProjectJoin<I1, I2, Tuple18<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17>> projectTuple18() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple18<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17>> tType = new TupleTypeInfo<Tuple18<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple18<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18> ProjectJoin<I1, I2, Tuple19<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>> projectTuple19() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple19<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>> tType = new TupleTypeInfo<Tuple19<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple19<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19> ProjectJoin<I1, I2, Tuple20<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19>> projectTuple20() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple20<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19>> tType = new TupleTypeInfo<Tuple20<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple20<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20> ProjectJoin<I1, I2, Tuple21<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20>> projectTuple21() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple21<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20>> tType = new TupleTypeInfo<Tuple21<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple21<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21> ProjectJoin<I1, I2, Tuple22<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21>> projectTuple22() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple22<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21>> tType = new TupleTypeInfo<Tuple22<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple22<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22> ProjectJoin<I1, I2, Tuple23<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22>> projectTuple23() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple23<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22>> tType = new TupleTypeInfo<Tuple23<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple23<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23> ProjectJoin<I1, I2, Tuple24<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23>> projectTuple24() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple24<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23>> tType = new TupleTypeInfo<Tuple24<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple24<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @return The projected data set.
+		 * 
+		 * @see Tuple
+		 * @see DataSet
+		 */
+		public <T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24> ProjectJoin<I1, I2, Tuple25<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24>> projectTuple25() {
+			TypeInformation<?>[] fTypes = extractFieldTypes(fieldIndexes);
+			TupleTypeInfo<Tuple25<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24>> tType = new TupleTypeInfo<Tuple25<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24>>(fTypes);
+
+			return new ProjectJoin<I1, I2, Tuple25<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, T24>>(this.ds1, this.ds2, this.keys1, this.keys2, this.hint, this.fieldIndexes, this.isFieldInFirst, tType, this);
+		}
+
+		/**
+		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
+		 * Requires the classes of the fields of the resulting tuples. 
+		 * 
+		 * @param type0 The class of field '0' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1255,8 +1775,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1278,9 +1797,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1302,10 +1819,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1327,11 +1841,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1353,12 +1863,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1380,13 +1885,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1408,14 +1907,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1437,15 +1929,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1467,16 +1951,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1498,17 +1973,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1530,18 +1995,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1563,19 +2017,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1597,20 +2039,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1632,21 +2061,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1668,22 +2083,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1705,23 +2105,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1743,24 +2127,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
-		 * @param type17 The class of field '17' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples.  @param type17 The class of field '17' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1782,25 +2149,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
-		 * @param type17 The class of field '17' of the result tuples.
-		 * @param type18 The class of field '18' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples.  @param type17 The class of field '17' of the result tuples.  @param type18 The class of field '18' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1822,26 +2171,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
-		 * @param type17 The class of field '17' of the result tuples.
-		 * @param type18 The class of field '18' of the result tuples.
-		 * @param type19 The class of field '19' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples.  @param type17 The class of field '17' of the result tuples.  @param type18 The class of field '18' of the result tuples.  @param type19 The class of field '19' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1863,27 +2193,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
-		 * @param type17 The class of field '17' of the result tuples.
-		 * @param type18 The class of field '18' of the result tuples.
-		 * @param type19 The class of field '19' of the result tuples.
-		 * @param type20 The class of field '20' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples.  @param type17 The class of field '17' of the result tuples.  @param type18 The class of field '18' of the result tuples.  @param type19 The class of field '19' of the result tuples.  @param type20 The class of field '20' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1905,28 +2215,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
-		 * @param type17 The class of field '17' of the result tuples.
-		 * @param type18 The class of field '18' of the result tuples.
-		 * @param type19 The class of field '19' of the result tuples.
-		 * @param type20 The class of field '20' of the result tuples.
-		 * @param type21 The class of field '21' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples.  @param type17 The class of field '17' of the result tuples.  @param type18 The class of field '18' of the result tuples.  @param type19 The class of field '19' of the result tuples.  @param type20 The class of field '20' of the result tuples.  @param type21 The class of field '21' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1948,29 +2237,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
-		 * @param type17 The class of field '17' of the result tuples.
-		 * @param type18 The class of field '18' of the result tuples.
-		 * @param type19 The class of field '19' of the result tuples.
-		 * @param type20 The class of field '20' of the result tuples.
-		 * @param type21 The class of field '21' of the result tuples.
-		 * @param type22 The class of field '22' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples.  @param type17 The class of field '17' of the result tuples.  @param type18 The class of field '18' of the result tuples.  @param type19 The class of field '19' of the result tuples.  @param type20 The class of field '20' of the result tuples.  @param type21 The class of field '21' of the result tuples.  @param type22 The class of field '22' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -1992,30 +2259,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
-		 * @param type17 The class of field '17' of the result tuples.
-		 * @param type18 The class of field '18' of the result tuples.
-		 * @param type19 The class of field '19' of the result tuples.
-		 * @param type20 The class of field '20' of the result tuples.
-		 * @param type21 The class of field '21' of the result tuples.
-		 * @param type22 The class of field '22' of the result tuples.
-		 * @param type23 The class of field '23' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples.  @param type17 The class of field '17' of the result tuples.  @param type18 The class of field '18' of the result tuples.  @param type19 The class of field '19' of the result tuples.  @param type20 The class of field '20' of the result tuples.  @param type21 The class of field '21' of the result tuples.  @param type22 The class of field '22' of the result tuples.  @param type23 The class of field '23' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -2037,31 +2281,7 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 		 * Projects a pair of joined elements to a {@link Tuple} with the previously selected fields. 
 		 * Requires the classes of the fields of the resulting tuples. 
 		 * 
-		 * @param type0 The class of field '0' of the result tuples.
-		 * @param type1 The class of field '1' of the result tuples.
-		 * @param type2 The class of field '2' of the result tuples.
-		 * @param type3 The class of field '3' of the result tuples.
-		 * @param type4 The class of field '4' of the result tuples.
-		 * @param type5 The class of field '5' of the result tuples.
-		 * @param type6 The class of field '6' of the result tuples.
-		 * @param type7 The class of field '7' of the result tuples.
-		 * @param type8 The class of field '8' of the result tuples.
-		 * @param type9 The class of field '9' of the result tuples.
-		 * @param type10 The class of field '10' of the result tuples.
-		 * @param type11 The class of field '11' of the result tuples.
-		 * @param type12 The class of field '12' of the result tuples.
-		 * @param type13 The class of field '13' of the result tuples.
-		 * @param type14 The class of field '14' of the result tuples.
-		 * @param type15 The class of field '15' of the result tuples.
-		 * @param type16 The class of field '16' of the result tuples.
-		 * @param type17 The class of field '17' of the result tuples.
-		 * @param type18 The class of field '18' of the result tuples.
-		 * @param type19 The class of field '19' of the result tuples.
-		 * @param type20 The class of field '20' of the result tuples.
-		 * @param type21 The class of field '21' of the result tuples.
-		 * @param type22 The class of field '22' of the result tuples.
-		 * @param type23 The class of field '23' of the result tuples.
-		 * @param type24 The class of field '24' of the result tuples.
+		 * @param type0 The class of field '0' of the result tuples.  @param type1 The class of field '1' of the result tuples.  @param type2 The class of field '2' of the result tuples.  @param type3 The class of field '3' of the result tuples.  @param type4 The class of field '4' of the result tuples.  @param type5 The class of field '5' of the result tuples.  @param type6 The class of field '6' of the result tuples.  @param type7 The class of field '7' of the result tuples.  @param type8 The class of field '8' of the result tuples.  @param type9 The class of field '9' of the result tuples.  @param type10 The class of field '10' of the result tuples.  @param type11 The class of field '11' of the result tuples.  @param type12 The class of field '12' of the result tuples.  @param type13 The class of field '13' of the result tuples.  @param type14 The class of field '14' of the result tuples.  @param type15 The class of field '15' of the result tuples.  @param type16 The class of field '16' of the result tuples.  @param type17 The class of field '17' of the result tuples.  @param type18 The class of field '18' of the result tuples.  @param type19 The class of field '19' of the result tuples.  @param type20 The class of field '20' of the result tuples.  @param type21 The class of field '21' of the result tuples.  @param type22 The class of field '22' of the result tuples.  @param type23 The class of field '23' of the result tuples.  @param type24 The class of field '24' of the result tuples. 		 * 
 		 * @return The projected data set.
 		 * 
 		 * @see Tuple
@@ -2106,6 +2326,34 @@ public abstract class JoinOperator<I1, I2, OUT> extends TwoInputUdfOperator<I1, 
 				
 				if(typeInfo.getTypeClass() != givenTypes[i]) {
 					throw new IllegalArgumentException("Given types do not match types of input data set.");
+				}
+
+				fieldTypes[i] = typeInfo;
+			}
+			
+			return fieldTypes;
+		}
+		
+		
+		private TypeInformation<?>[] extractFieldTypes(int[] fields) {
+			
+			TypeInformation<?>[] fieldTypes = new TypeInformation[fields.length];
+
+			for(int i=0; i<fields.length; i++) {
+				
+				TypeInformation<?> typeInfo;
+				if(isFieldInFirst[i]) {
+					if(fields[i] >= 0) {
+						typeInfo = ((TupleTypeInfo<?>)ds1.getType()).getTypeAt(fields[i]);
+					} else {
+						typeInfo = ds1.getType();
+					}
+				} else {
+					if(fields[i] >= 0) {
+						typeInfo = ((TupleTypeInfo<?>)ds2.getType()).getTypeAt(fields[i]);
+					} else {
+						typeInfo = ds2.getType();
+					}
 				}
 
 				fieldTypes[i] = typeInfo;
